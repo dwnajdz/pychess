@@ -21,33 +21,57 @@
 
   <script src="/static/js/chessboard-1.0.0.min.js"></script>
   <script lang="javascript">
-    function onDrop(source, target, piece, newPos, oldPos, orientation) {
-      // new and old FEN chess position
-      const newPosFen = Chessboard.objToFen(newPos);
-      const oldPosFen = Chessboard.objToFen(oldPos); 
+    // used to transmit user new position
+    const websocket = new WebSocket("ws://localhost:3001/");
 
-      console.log('Source: ' + source);
-      console.log('Target: ' + target);
-      console.log('Piece: ' + piece);
-      console.log('New position: ' + newPosFen);
-      console.log('Old position: ' + oldPosFen);
-      console.log('Orientation: ' + orientation);
-      console.log('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~');
+    // decides which color can play 'w' white or 'b' black
+    let turn = 'b';
+
+    function onDrop(source, target, piece, newPos, oldPos, orientation) {
+      // detect who current turn is 
+      const con1 = Boolean((turn === 'w' && piece.search(/b/)));
+      const con2 = Boolean((turn === 'b' && piece.search(/w/)));
+      if (con1 || con2) return 'snapback';
+
+      // FEN chess positions
+      const newPosFen = Chessboard.objToFen(newPos);
+      const oldPosFen = Chessboard.objToFen(oldPos);
 
       // append current fen position to #position div  
       const posDiv = document.getElementById('position');
       const position = document.createTextNode(newPosFen + ',');
       posDiv.appendChild(position);
+
+      const information = {
+        new_pos: newPosFen,
+        old_pos: oldPosFen,
+        source: source,
+        target: target,
+        orientation: orientation,
+        piece: piece
+      };
+      
+      console.log(information);
+      websocket.send(JSON.stringify(information));
+    }
+
+    function onChange(oldPos, newPos) {
+      if (turn === 'w') turn = 'b';
+      else turn = 'w';
     }
 
     const board = Chessboard('board', {
       draggable: true,
       orientation: 'white',
       onDrop: onDrop,
+      onChange: onChange,
       position: 'start'
     });
 
-    $('#startBtn').on('click', board.start);
+    $('#startBtn').on('click', () => {
+      board.start;
+      websocket.send(board.position);
+    });
   </script>
 </body>
 
