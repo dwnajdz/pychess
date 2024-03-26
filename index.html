@@ -22,40 +22,75 @@
   <script src="/static/js/chessboard-1.0.0.min.js"></script>
   <script lang="javascript">
     // used to transmit user new position
-    const websocket = new WebSocket("ws://localhost:3001/");
+    const engine_socket = new WebSocket("ws://localhost:3001/");
 
     // decides which color can play 'w' white or 'b' black
     let turn = 'b';
 
+    function engineExchange(socket, information) {
+      return new Promise((resolve, reject) => {
+        socket.send(information);
+
+        socket.onmessage = (({ data }) => {
+          const result = JSON.parse(data);
+          const isLegal = result.isLegal ?? true;
+
+          console.log("result message:", result);
+          resolve(isLegal);
+        });
+
+        socket.onerror = ((error) => {
+          console.error("Engine error:", error);
+          reject(error);
+        });
+
+        // Event listener for when the connection is closed
+        socket.onclose = ((event) => {
+          console.log('WebSocket connection closed');
+          // Reject the promise if the WebSocket connection is closed unexpectedly
+          reject(new Error('WebSocket connection closed unexpectedly'));
+        });
+      })
+    }
+
     function onDrop(source, target, piece, newPos, oldPos, orientation) {
-      // detect who current turn is 
-      const con1 = Boolean((turn === 'w' && piece.search(/b/)));
-      const con2 = Boolean((turn === 'b' && piece.search(/w/)));
-      if (con1 || con2) return 'snapback';
+      function wrongMove(nextMoveColor, color, pieceSearch) {
+        return Boolean((color === nextMoveColor) && piece.search(pieceSearch));
+      }
+      // block of moving pieces, if there is no user turn
+      if (wrongMove(turn, 'w', /b/) || wrongMove(turn, 'b', /w/)) return 'snapback';
 
       // FEN chess positions
       const newPosFen = Chessboard.objToFen(newPos);
       const oldPosFen = Chessboard.objToFen(oldPos);
+      if (oldPosFen === newPosFen) return 'snapback';
 
       // append current fen position to #position div  
       const posDiv = document.getElementById('position');
       const position = document.createTextNode(newPosFen + ',');
       posDiv.appendChild(position);
 
-      const information = {
+      const information = JSON.stringify({
         new_pos: newPosFen,
         old_pos: oldPosFen,
         source: source,
         target: target,
-        orientation: orientation,
+        next_turn: turn,
         piece: piece
-      };
-      
+      });
       console.log(information);
-      websocket.send(JSON.stringify(information));
+
+      //engine_socket.send(information);
+      //engine_socket.addEventListener("message", ({ data }) => {
+      //  const result = JSON.parse(data);
+      //  const isLegal = result.isLegal ?? true;
+//
+      //  console.log("result message:", result);
+      //});
     }
 
     function onChange(oldPos, newPos) {
+      // after piece is dropped change turn to other color
       if (turn === 'w') turn = 'b';
       else turn = 'w';
     }
@@ -70,7 +105,7 @@
 
     $('#startBtn').on('click', () => {
       board.start;
-      websocket.send(board.position);
+      engine_socket.send(board.position);
     });
   </script>
 </body>
